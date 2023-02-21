@@ -1,0 +1,244 @@
+
+set.seed(123)
+
+# Data manipulation
+
+library(data.table)
+
+library(dplyr)
+
+library(DT)
+
+# Time manipulation
+
+library(lubridate)
+
+# Visualization
+
+library(ggplot2)
+
+library(plotrix)
+
+library(corrplot)
+
+library(ggrepel)
+
+# Wordcloud
+
+library(wordcloud)
+
+# Text manipulation
+
+library(tidytext)
+
+library(stringr)
+
+library(tm)
+
+library(sentimentr)
+
+library(wordcloud)
+
+library(RSentiment)
+
+
+gb <- tail(fread("Desktop/R_Lab/R_Mini_Project/GBvideos.csv",encoding = "UTF-8"),20000)
+
+gb[,"Location":="GB"]
+
+fr <- tail(fread("Desktop/R_Lab/R_Mini_Project/FRvideos.csv",encoding = "UTF-8"),20000)
+
+fr[,"Location":="FR"]
+
+ca <- tail(fread("Desktop/R_Lab/R_Mini_Project/CAvideos.csv",encoding = "UTF-8"),20000)
+
+ca[,"Location":="CA"]
+
+us <- tail(fread("Desktop/R_Lab/R_Mini_Project/USvideos.csv",encoding = "UTF-8"),20000)
+
+us[,"Location":="US"]
+
+de <- tail(fread("Desktop/R_Lab/R_Mini_Project/DEvideos.csv",encoding = "UTF-8"),20000)
+
+de[,"Location":="DE"]
+
+
+
+videos <- as.data.table(rbind(gb,fr,ca,us,de))
+
+videos$trending_date <- ydm(videos$trending_date)
+
+videos$publish_time <- ymd(substr(videos$publish_time,start = 1,stop = 10))
+
+videos$dif_days <- videos$trending_date-videos$publish_time
+
+
+
+
+#Correlation Matrix
+
+corrplot.mixed(corr = cor(videos[,c("category_id","views","likes","dislikes","comment_count"),with=F]))
+
+
+
+#Most Viewed Videos
+
+mvideo <- videos[,.("Total_Views"=round(max(views,na.rm = T),digits = 2)),by=.(title,thumbnail_link)][order(-Total_Views)]
+
+mvideo %>% 
+
+  arrange(-Total_Views) %>% 
+
+  top_n(10,wt = Total_Views) %>% 
+
+  select(title, Total_Views) 
+
+
+
+#Most Liked Videos
+
+mvideo <- videos[,.("Total_Likes"=round(max(likes,na.rm = T),digits = 2)),by=.(title,thumbnail_link)][order(-Total_Likes)]
+
+mvideo %>% 
+
+  arrange(-Total_Likes) %>% 
+
+  top_n(10,wt = Total_Likes) %>% 
+
+  select(title, Total_Likes)
+
+
+
+#Most Disliked Videos
+
+mvideo <- videos[,.("Total_Dislikes"=round(max(dislikes,na.rm = T),digits = 2)),by=.(title,thumbnail_link)][order(-Total_Dislikes)]
+
+mvideo %>% 
+
+  arrange(-Total_Dislikes) %>% 
+
+  top_n(10,wt = Total_Dislikes) %>% 
+
+  select(title, Total_Dislikes) 
+
+
+#Most Commented Videos
+
+mvideo <- videos[,.("Total_comments"=round(max(comment_count,na.rm = T),digits = 2)),by=.(title,thumbnail_link)][order(-Total_comments)]
+
+mvideo %>% 
+
+  arrange(-Total_comments) %>% 
+
+  top_n(10,wt = Total_comments) %>% 
+
+  select(title, Total_comments)
+
+
+
+#Top Trending Channels
+
+ggplot(videos[,.N,by=channel_title][order(-N)][1:10],aes(reorder(channel_title,-N),N,fill=channel_title))+geom_bar(stat="identity")+geom_label(aes(label=N))+guides(fill="none")+theme(axis.text.x = element_text(angle = 45,hjust = 1))+  labs(title=" Top trending channel titles in all countries")+
+
+xlab(NULL)+ylab(NULL)+coord_flip()
+
+
+
+#Time Between Published and Trending
+
+ggplot(videos[dif_days<30],aes(as.factor(dif_days),fill=as.factor(dif_days)))+geom_bar()+guides(fill="none")+labs(title=" Time between published and trending",subtitle="In days")+xlab(NULL)+ylab(NULL)
+
+
+
+#Views vs Likes
+
+ggplot(videos[,.("views"=max(views),"likes"=max(likes)),by=title],aes(views,likes,colour=likes,size=likes))+geom_jitter()+geom_smooth()+guides(fill="none")+labs(caption="Donyoe",title="Views Vs Likes",subtitle="In days")+theme(legend.position = "none")+geom_text_repel(data=subset(videos[,.("views"=max(views),"likes"=max(likes)),by=title], views > 5e+07),
+
+aes(views,likes,label=title),check_overlap=T)
+
+
+
+#Top Countries on the basis of Total Views
+
+ggplot(videos[,.("Total_Views"=max(views)),by=Location],aes(reorder(Location,-Total_Views),Total_Views,fill=Location))+geom_bar(stat="identity")+geom_label(aes(label=Total_Views))+guides(fill="none")+theme(axis.text.x = element_text(angle = 45,hjust = 1))+  labs(title=" Total Views by Countries")+xlab(NULL)+ylab(NULL)
+
+
+
+#Top Countries on the basis of Likes
+
+ggplot(videos[,.("Total_Likes"=max(likes)),by=Location],aes(reorder(Location,-Total_Likes),Total_Likes,fill=Location))+geom_bar(stat="identity")+geom_label(aes(label=Total_Likes))+guides(fill="none")+theme(axis.text.x = element_text(angle = 45,hjust = 1))+  labs(title=" Total number of likes by Countries")+xlab(NULL)+ylab(NULL)
+
+
+
+#Title length in words
+
+videos[,"Word_len":= str_length(title)]
+
+ggplot(videos[,.N,keyby=Word_len],aes(Word_len,N,fill=N))+geom_bar(stat = "identity")+guides(fill="none")+labs(title="Title length in words")+xlab(NULL)+ylab(NULL)
+
+
+#Word Cloud
+
+corpus = Corpus(VectorSource(list(sample(videos$title,size=2000))))
+
+corpus = tm_map(corpus, removePunctuation)
+
+corpus = tm_map(corpus, content_transformer(tolower))
+
+corpus = tm_map(corpus, removeNumbers) 
+
+corpus = tm_map(corpus, stripWhitespace)
+
+corpus = tm_map(corpus, removeWords, stopwords('english'))
+
+dtm_eap = DocumentTermMatrix(VCorpus(VectorSource(corpus[[1]]$content)))
+
+freq_eap <- colSums(as.matrix(dtm_eap))
+
+sentiments_eap = calculate_sentiment(names(freq_eap))
+
+sent_video = cbind(sentiments_eap, as.data.frame(freq_eap))
+
+sent_video[contains(match = "uu",vars = sent_video$text),"freq_eap"] <- 0L
+
+wordcloud(sent_video$text,sent_video$freq, min.freq=5,colors=brewer.pal(6,"Dark2"),random.order = F)
+
+
+
+#Sentiment Analysis
+
+sents_eap <- sentiment(videos$description)
+
+sents_eap <- sents_eap[,.("word_count"=sum(word_count),"sentiment"=sum(sentiment)),by=element_id]  
+
+ggplot(data=sents_eap)+
+
+  geom_histogram(mapping = aes(x=sentiment),binwidth = .1)+
+
+  theme_bw()+scale_fill_brewer(palette = "Set1")+
+
+  geom_vline(xintercept = 0, color = "coral", size = 1.5, alpha = 0.6, linetype = "longdash") +
+
+  labs(title="Description Score")+coord_cartesian(xlim = c(-4, 4))
+
+
+
+#Sentiment Analysis 2
+
+ sentiments <- as.data.table(sentiments_eap)
+
+ sentiments1 <- sentiments[,.N,by=.(sentiment)]
+
+ sentiments1[,"Total":=sum(N)]
+
+ sentiments1 <- sentiments1[,.("Percentage"=100*N/Total),by=.(sentiment)]
+ 
+ggplot(sentiments1,aes(x = sentiment,y = Percentage ,fill=sentiment ))+
+
+  geom_bar(stat = "identity") +
+
+  ggtitle("Description Sentiments (Sample)")+xlab("Sentiment")+ylab("% Sentiment")+ 
+
+  theme(axis.text.x = element_text(angle = 45, size=8,hjust = 1))
+
+
